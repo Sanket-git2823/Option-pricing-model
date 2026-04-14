@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black-Scholes Pricer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0c0f;
+    --bg2:       #111418;
+    --bg3:       #181c22;
+    --border:    #1e2530;
+    --border2:   #2a3340;
+    --text:      #c8d4e0;
+    --muted:     #5a6a7a;
+    --accent:    #00d4aa;
+    --accent2:   #0099ff;
+    --call:      #00d4aa;
+    --put:       #ff6b6b;
+    --label:     #4a5a6a;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--bg2);
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    opacity: 0.9;
+  }
+
+  .logo span { color: var(--muted); }
+  header h1 { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); letter-spacing: 0.02em; }
+  header .badge { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--muted); background: var(--bg3); border: 1px solid var(--border); padding: 3px 10px; border-radius: 3px; letter-spacing: 0.08em; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - 61px); }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .section-head {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--label);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+  .field label span { color: var(--accent); font-weight: 500; }
+
+  .field input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2px;
+  background: var(--border2);
+  border-radius: 1px;
+  outline: none;
+  cursor: pointer;
+}
+  .field input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .field input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+
+  .field input[type="number"] {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.15s;
+  }
+  .field input[type="number"]:focus { border-color: var(--accent); }
+
+  .calc-btn {
+    width: 100%;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    margin-top: 4px;
+  }
+  .calc-btn:hover { opacity: 0.85; }
+  .calc-btn:active { transform: scale(0.98); }
+
+  .api-note {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    line-height: 1.8;
+  }
+  .api-note a { color: var(--accent2); text-decoration: none; }
+
+  /* ── Main ── */
+  .main { overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Price cards ── */
+  .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .price-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .price-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .price-card.call::before { background: var(--call); }
+  .price-card.put::before  { background: var(--put); }
+
+  .price-card .type {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .price-card .price-val {
+    font-family: var(--mono);
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .price-card.call .price-val { color: var(--call); }
+  .price-card.put  .price-val { color: var(--put); }
+
+  .price-card .sub-vals {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .price-card .sub-vals span { color: var(--text); }
+
+  /* ── Greeks grid ── */
+  .greeks-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .greek-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 14px 12px;
+  }
+  .greek-card .g-name {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .greek-card .g-val {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .greek-card .g-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  /* ── d1/d2 row ── */
+  .d-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .d-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .d-card .dn { color: var(--muted); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px; }
+  .d-card .dv { color: var(--accent2); }
+
+  /* ── Charts ── */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chart-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+  }
+  .chart-card h3 {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* ── Tab row ── */
+  .tab-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tab {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.12s;
+    letter-spacing: 0.06em;
+  }
+  .tab.active-call { border-color: var(--call); color: var(--call); background: rgba(0,212,170,0.08); }
+  .tab.active-put  { border-color: var(--put);  color: var(--put);  background: rgba(255,107,107,0.08); }
+  .tab.active-both { border-color: var(--accent2); color: var(--accent2); background: rgba(0,153,255,0.08); }
+
+  /* ── Status bar ── */
+  .status-bar {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 6px 0 2px;
+    letter-spacing: 0.05em;
+  }
+  .status-bar .ok { color: var(--call); }
+  .status-bar .err { color: var(--put); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 120px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--label);
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">BS<span>/</span>01</div>
+  <h1>Black-Scholes Option Pricer</h1>
+  <div class="badge">European Options</div>
+</header>
+
+<div class="app">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div>
+      <div class="section-head">Parameters</div>
+
+      <div class="field">
+        <label>Spot price (S) <span id="lS">100.00</span></label>
+        <input type="range" id="rS" min="10" max="500" step="1" value="100" oninput="syncSlider('S',this.value)">
+        <input type="number" id="nS" value="100" step="1" min="1" oninput="syncNum('S',this.value)">
+      </div>
+
+      <div class="field">
+        <label>Strike price (K) <span id="lK">105.00</span></label>
+        <input type="range" id="rK" min="10" max="500" step="1" value="105" oninput="syncSlider('K',this.value)">
+        <input type="number" id="nK" value="105" step="1" min="1" oninput="syncNum('K',this.value)">
+      </div>
+
+      <div class="field">
+        <label>Time to expiry – years (T) <span id="lT">0.50</span></label>
+        <input type="range" id="rT" min="0.01" max="5" step="0.01" value="0.5" oninput="syncSlider('T',this.value)">
+        <input type="number" id="nT" value="0.5" step="0.01" min="0.01" oninput="syncNum('T',this.value)">
+      </div>
+
+      <div class="field">
+        <label>Risk-free rate % (r) <span id="lr">5.00</span></label>
+        <input type="range" id="rr" min="0" max="20" step="0.1" value="5" oninput="syncSlider('r',this.value)">
+        <input type="number" id="nr" value="5" step="0.1" min="0" oninput="syncNum('r',this.value)">
+      </div>
+
+      <div class="field">
+        <label>Volatility % (σ) <span id="lsigma">20.00</span></label>
+        <input type="range" id="rsigma" min="1" max="150" step="0.5" value="20" oninput="syncSlider('sigma',this.value)">
+        <input type="number" id="nsigma" value="20" step="0.5" min="1" oninput="syncNum('sigma',this.value)">
+      </div>
+
+      <div class="field">
+        <label>Dividend yield % (q) <span id="lq">0.00</span></label>
+        <input type="range" id="rq" min="0" max="20" step="0.1" value="0" oninput="syncSlider('q',this.value)">
+        <input type="number" id="nq" value="0" step="0.1" min="0" oninput="syncNum('q',this.value)">
+      </div>
+
+      <button class="calc-btn" onclick="calculate()">Calculate →</button>
+      <div class="status-bar" id="status">ready</div>
+    </div>
+
+    <div>
+      <div class="section-head">Python API</div>
+      <div class="api-note">
+        Run <code>black_scholes.py</code> as a local server:<br><br>
+        <code>pip install flask flask-cors numpy scipy</code><br>
+        <code>python black_scholes.py</code><br><br>
+        Then set API URL below to<br>
+        <code>http://localhost:5000</code><br><br>
+        <label style="color:var(--muted);font-size:11px;">API base URL</label><br>
+        <input type="text" id="apiUrl" value="" placeholder="(offline — JS fallback active)"
+          style="width:100%;margin-top:6px;background:var(--bg);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 8px;border-radius:3px;outline:none;">
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <!-- Price cards -->
+    <div class="price-row" id="priceRow">
+      <div class="price-card call">
+        <div class="type">Call price</div>
+        <div class="price-val" id="callPrice">—</div>
+        <div class="sub-vals">
+          <span>Intrinsic <span id="callIntr">—</span></span>
+          <span>Time <span id="callTime">—</span></span>
+        </div>
+      </div>
+      <div class="price-card put">
+        <div class="type">Put price</div>
+        <div class="price-val" id="putPrice">—</div>
+        <div class="sub-vals">
+          <span>Intrinsic <span id="putIntr">—</span></span>
+          <span>Time <span id="putTime">—</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Greeks -->
+    <div>
+      <div class="section-head" style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--label);text-transform:uppercase;margin-bottom:10px;">Greeks</div>
+      <div class="greeks-grid">
+        <div class="greek-card">
+          <div class="g-name">Delta</div>
+          <div class="g-val" id="gDelta">—</div>
+          <div class="g-sub">Call / Put</div>
+        </div>
+        <div class="greek-card">
+          <div class="g-name">Gamma</div>
+          <div class="g-val" id="gGamma">—</div>
+          <div class="g-sub">Δ per $1 spot</div>
+        </div>
+        <div class="greek-card">
+          <div class="g-name">Theta</div>
+          <div class="g-val" id="gTheta">—</div>
+          <div class="g-sub">Call / Put per day</div>
+        </div>
+        <div class="greek-card">
+          <div class="g-name">Vega</div>
+          <div class="g-val" id="gVega">—</div>
+          <div class="g-sub">Per 1% vol move</div>
+        </div>
+        <div class="greek-card">
+          <div class="g-name">Rho</div>
+          <div class="g-val" id="gRho">—</div>
+          <div class="g-sub">Call / Put per 1% rate</div>
+        </div>
+        <div class="d-card" style="grid-column:span 1">
+          <div class="dn">d₁</div>
+          <div class="dv" id="gD1">—</div>
+        </div>
+        <div class="d-card" style="grid-column:span 1">
+          <div class="dn">d₂</div>
+          <div class="dv" id="gD2">—</div>
+        </div>
+        <div class="d-card" style="grid-column:span 1">
+          <div class="dn">N(d₁) / N(d₂)</div>
+          <div class="dv" id="gNd">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--label);text-transform:uppercase;">Charts</span>
+        <div class="tab-row" style="margin:0">
+          <button class="tab active-call" id="tab-call" onclick="setMode('call')">Call</button>
+          <button class="tab" id="tab-put" onclick="setMode('put')">Put</button>
+          <button class="tab" id="tab-both" onclick="setMode('both')">Both</button>
+        </div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <h3>Payoff at expiry (net of premium)</h3>
+          <div class="chart-wrap"><canvas id="payoffChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Option price vs spot (today)</h3>
+          <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── Sync sliders/numbers ──────────────────────────
+const params = { S:100, K:105, T:0.5, r:5, sigma:20, q:0 };
+
+function syncSlider(key, val) {
+  params[key] = parseFloat(val);
+  document.getElementById('n'+key).value = parseFloat(val).toFixed(key==='T'?2:2);
+  document.getElementById('l'+key).textContent = parseFloat(val).toFixed(2);
+  calculate();
+}
+function syncNum(key, val) {
+  params[key] = parseFloat(val)||0;
+  document.getElementById('r'+key).value = val;
+  document.getElementById('l'+key).textContent = (parseFloat(val)||0).toFixed(2);
+  calculate();
+}
+
+// ── Black-Scholes JS fallback ─────────────────────
+function normCDF(x) {
+  const a=[0.254829592,-0.284496736,1.421413741,-1.453152027,1.061405429], p=0.3275911;
+  const s=x<0?-1:1; x=Math.abs(x);
+  const t=1/(1+p*x);
+  let y=1-(((((a[4]*t+a[3])*t)+a[2])*t+a[1])*t+a[0])*t*Math.exp(-x*x);
+  return 0.5*(1+s*(2*y-1));
+}
+function normPDF(x){ return Math.exp(-0.5*x*x)/Math.sqrt(2*Math.PI); }
+
+function bsCalc(S,K,T,r,sigma,q){
+  const d1=(Math.log(S/K)+(r-q+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
+  const d2=d1-sigma*Math.sqrt(T);
+  const Nd1=normCDF(d1),Nnd1=normCDF(-d1),Nd2=normCDF(d2),Nnd2=normCDF(-d2);
+  const eqT=Math.exp(-q*T),erT=Math.exp(-r*T);
+  const call=S*eqT*Nd1-K*erT*Nd2;
+  const put=K*erT*Nnd2-S*eqT*Nnd1;
+  const nd1=normPDF(d1);
+  return {
+    call_price:call, put_price:put,
+    intrinsic_call:Math.max(0,S-K), intrinsic_put:Math.max(0,K-S),
+    time_value_call:call-Math.max(0,S-K), time_value_put:put-Math.max(0,K-S),
+    d1,d2,N_d1:Nd1,N_d2:Nd2,
+    delta_call:eqT*Nd1, delta_put:-eqT*Nnd1,
+    gamma:eqT*nd1/(S*sigma*Math.sqrt(T)),
+    theta_call:(-S*eqT*nd1*sigma/(2*Math.sqrt(T))-r*K*erT*Nd2+q*S*eqT*Nd1)/365,
+    theta_put:(-S*eqT*nd1*sigma/(2*Math.sqrt(T))+r*K*erT*Nnd2-q*S*eqT*Nnd1)/365,
+    vega:S*eqT*nd1*Math.sqrt(T)*0.01,
+    rho_call:K*T*erT*Nd2*0.01, rho_put:-K*T*erT*Nnd2*0.01
+  };
+}
+
+function bsCurves(S,K,T,r,sigma,q){
+  const cp=bsCalc(S,K,T,r,sigma,q).call_price;
+  const pp=bsCalc(S,K,T,r,sigma,q).put_price;
+  const spots=[],cp_=[], pp_=[], cpay=[],ppay=[];
+  for(let i=0;i<=80;i++){
+    const s=S*0.5+(S)*i/80;
+    spots.push(parseFloat(s.toFixed(2)));
+    const b=bsCalc(s,K,T,r,sigma,q);
+    cp_.push(parseFloat(b.call_price.toFixed(4)));
+    pp_.push(parseFloat(b.put_price.toFixed(4)));
+    cpay.push(parseFloat((Math.max(0,s-K)-cp).toFixed(4)));
+    ppay.push(parseFloat((Math.max(0,K-s)-pp).toFixed(4)));
+  }
+  return {spots,call_prices:cp_,put_prices:pp_,call_payoff:cpay,put_payoff:ppay};
+}
+
+// ── Charts ───────────────────────────────────────
+let payoffC=null, priceC=null, chartMode='call';
+
+function setMode(m){
+  chartMode=m;
+  ['call','put','both'].forEach(id=>{
+    document.getElementById('tab-'+id).className='tab'+(m===id?' active-'+m:'');
+  });
+  if(lastCurves) renderCharts(lastCurves);
+}
+
+let lastCurves=null;
+
+function renderCharts(c){
+  lastCurves=c;
+  const ds1=[], ds2=[];
+  if(chartMode==='call'||chartMode==='both'){
+    ds1.push({label:'Call P&L',data:c.call_payoff,borderColor:'#00d4aa',borderWidth:1.5,pointRadius:0,tension:0.3,fill:false});
+    ds2.push({label:'Call price',data:c.call_prices,borderColor:'#00d4aa',borderWidth:1.5,pointRadius:0,tension:0.3,fill:false});
+  }
+  if(chartMode==='put'||chartMode==='both'){
+    ds1.push({label:'Put P&L',data:c.put_payoff,borderColor:'#ff6b6b',borderWidth:1.5,pointRadius:0,tension:0.3,fill:false});
+    ds2.push({label:'Put price',data:c.put_prices,borderColor:'#ff6b6b',borderWidth:1.5,pointRadius:0,tension:0.3,fill:false});
+  }
+
+  const gridColor='rgba(255,255,255,0.04)', tickColor='#4a5a6a';
+  const chartOpts=(yTitle)=>({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ display:true, position:'top', labels:{ color:tickColor, font:{family:'IBM Plex Mono',size:10}, boxWidth:8, padding:12 } } },
+    scales:{
+      x:{ ticks:{color:tickColor,font:{family:'IBM Plex Mono',size:9},maxTicksLimit:7}, grid:{color:gridColor} },
+      y:{ title:{display:true,text:yTitle,color:tickColor,font:{family:'IBM Plex Mono',size:9}}, ticks:{color:tickColor,font:{family:'IBM Plex Mono',size:9}}, grid:{color:gridColor} }
+    }
+  });
+
+  if(payoffC) payoffC.destroy();
+  payoffC=new Chart(document.getElementById('payoffChart'),{type:'line',data:{labels:c.spots,datasets:ds1},options:chartOpts('P&L ($)')});
+
+  if(priceC) priceC.destroy();
+  priceC=new Chart(document.getElementById('priceChart'),{type:'line',data:{labels:c.spots,datasets:ds2},options:chartOpts('Price ($)')});
+}
+
+// ── Update UI ─────────────────────────────────────
+function renderResult(d, curves){
+  const f=(v,n=4)=>v.toFixed(n);
+  document.getElementById('callPrice').textContent='$'+f(d.call_price,3);
+  document.getElementById('putPrice').textContent='$'+f(d.put_price,3);
+  document.getElementById('callIntr').textContent='$'+f(d.intrinsic_call,2);
+  document.getElementById('callTime').textContent='$'+f(d.time_value_call,3);
+  document.getElementById('putIntr').textContent='$'+f(d.intrinsic_put,2);
+  document.getElementById('putTime').textContent='$'+f(d.time_value_put,3);
+  document.getElementById('gDelta').textContent=f(d.delta_call)+' / '+f(d.delta_put);
+  document.getElementById('gGamma').textContent=f(d.gamma,5);
+  document.getElementById('gTheta').textContent=f(d.theta_call)+' / '+f(d.theta_put);
+  document.getElementById('gVega').textContent='$'+f(d.vega);
+  document.getElementById('gRho').textContent='$'+f(d.rho_call)+' / $'+f(d.rho_put);
+  document.getElementById('gD1').textContent=f(d.d1);
+  document.getElementById('gD2').textContent=f(d.d2);
+  document.getElementById('gNd').textContent=f(d.N_d1,3)+' / '+f(d.N_d2,3);
+  renderCharts(curves);
+}
+
+// ── Main calculate ────────────────────────────────
+async function calculate(){
+  const {S,K,T,r,sigma,q}=params;
+  const rDec=r/100, sDec=sigma/100, qDec=q/100;
+  const apiUrl=(document.getElementById('apiUrl').value||'').trim();
+  const status=document.getElementById('status');
+
+  if(apiUrl){
+    try{
+      status.innerHTML='<span style="color:var(--accent2)">fetching from python api...</span>';
+      const qs=`?S=${S}&K=${K}&T=${T}&r=${rDec}&sigma=${sDec}&q=${qDec}`;
+      const [pr, cr] = await Promise.all([
+        fetch(apiUrl+'/price'+qs).then(r=>r.json()),
+        fetch(apiUrl+'/curves'+qs).then(r=>r.json())
+      ]);
+      if(pr.ok && cr.ok){
+        renderResult(pr.data, cr.data);
+        status.innerHTML='<span class="ok">✓ python api · '+(new Date()).toLocaleTimeString()+'</span>';
+        return;
+      }
+    } catch(e){
+      status.innerHTML='<span class="err">api error — using js fallback</span>';
+    }
+  }
+
+  // JS fallback
+  const d=bsCalc(S,K,T,rDec,sDec,qDec);
+  const c=bsCurves(S,K,T,rDec,sDec,qDec);
+  renderResult(d,c);
+  status.innerHTML='<span style="color:var(--muted)">js fallback · '+(new Date()).toLocaleTimeString()+'</span>';
+}
+
+// Initial render
+calculate();
+</script>
+</body>
+</html>
